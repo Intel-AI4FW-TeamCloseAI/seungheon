@@ -34,6 +34,65 @@ class DeepfakeDetector(
     )
 
     /**
+     * 간단한 NMS(Non-Maximum Suppression) 함수
+     * @param boxes   YOLO 모델이 반환한 바운딩박스 목록
+     * @param iouThreshold  IoU 임계값 (보통 0.45 ~ 0.5 사이)
+     *
+     * @return NMS 수행 후 중복 제거된 최종 바운딩박스 목록
+     */
+//    private fun nonMaxSuppression(boxes: List<FaceBox>, iouThreshold: Float = 0.45f): List<FaceBox> {
+//        // 1) boxes를 score(신뢰도) 기준 내림차순 정렬
+//        val sorted = boxes.sortedByDescending { it.score }
+//
+//        // 2) 결과 박스를 담을 리스트
+//        val selected = mutableListOf<FaceBox>()
+//
+//        // 3) 정렬된 boxes를 돌면서
+//        for (box in sorted) {
+//            var shouldSelect = true
+//            for (other in selected) {
+//                // 이미 선택된 박스(other)와 IoU가 높으면, box는 무시
+//                val iouVal = iou(box, other)
+//                if (iouVal > iouThreshold) {
+//                    shouldSelect = false
+//                    break
+//                }
+//            }
+//            if (shouldSelect) {
+//                selected.add(box)
+//            }
+//        }
+//        return selected
+//    }
+//
+//    /**
+//     * IoU(Intersection-over-Union) 계산
+//     * @return 0.0 ~ 1.0
+//     */
+//    private fun iou(a: FaceBox, b: FaceBox): Float {
+//        val interArea = intersectionArea(a, b)
+//        val unionArea = boxArea(a) + boxArea(b) - interArea
+//        return if (unionArea <= 0f) 0f else interArea / unionArea
+//    }
+//
+//    private fun boxArea(box: FaceBox): Float {
+//        val w = (box.x2 - box.x1).coerceAtLeast(0f)
+//        val h = (box.y2 - box.y1).coerceAtLeast(0f)
+//        return w * h
+//    }
+//
+//    private fun intersectionArea(a: FaceBox, b: FaceBox): Float {
+//        val interX1 = maxOf(a.x1, b.x1)
+//        val interY1 = maxOf(a.y1, b.y1)
+//        val interX2 = minOf(a.x2, b.x2)
+//        val interY2 = minOf(a.y2, b.y2)
+//
+//        val w = (interX2 - interX1).coerceAtLeast(0f)
+//        val h = (interY2 - interY1).coerceAtLeast(0f)
+//        return w * h
+//    }
+
+    /**
      * detectAndClassify(...) 의 결과 한 건
      *
      * @param faceIndex   - 몇 번째 얼굴인지 (없으면 -1)
@@ -88,15 +147,12 @@ class DeepfakeDetector(
      */
     private fun detectFaces(
         bitmap: Bitmap,
-        confThreshold: Float = 0.25f
+        confThreshold: Float = 0.8f
     ): List<FaceBox> {
         val inputTensor = preprocessForYolo(bitmap, 640)
-
-        // YOLO 모델 입력 노드 이름이 "images" 등일 수도 있으니 확인 필요
         val output = yoloSession.run(mapOf("images" to inputTensor))
-        // 가정: output[0]의 shape = [1][N][6]
-        val rawOutput = output[0].value as Array<Array<FloatArray>>
 
+        val rawOutput = output[0].value as Array<Array<FloatArray>>
         val boxes = mutableListOf<FaceBox>()
         for (detection in rawOutput[0]) {
             val x1 = detection[0]
@@ -110,6 +166,9 @@ class DeepfakeDetector(
                 boxes.add(FaceBox(x1, y1, x2, y2, score, cls))
             }
         }
+
+        // 추가: NMS 수행
+//        val finalBoxes = nonMaxSuppression(boxes, iouThreshold = 0.25f)
         return boxes
     }
 
@@ -231,7 +290,7 @@ class DeepfakeDetector(
      */
     fun detectAndClassify(
         bitmap: Bitmap,
-        confThreshold: Float = 0.25f,
+        confThreshold: Float = 0.8f,
         extendRatio: Float = 0.5f
     ): List<DetectionResult> {
         val faceBoxes = detectFaces(bitmap, confThreshold)
